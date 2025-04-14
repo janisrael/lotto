@@ -92,6 +92,17 @@ def create_draw_tables():
             )
         ''')
 
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS prize_details_data (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                draw_id INT,
+                category VARCHAR(200),
+                prize VARCHAR(200),
+                winners VARCHAR(200),
+                FOREIGN KEY (draw_id) REFERENCES draw_results(id) ON DELETE CASCADE
+            )
+        ''')
+
         conn.commit()
 
 # --- DATA INSERTION ---
@@ -129,13 +140,26 @@ def save_draw_result(draw):
         # Retrieve the inserted draw ID
         cursor.execute("SELECT id FROM draw_results WHERE draw_date = %s", (draw["date"],))
         draw_id = cursor.fetchone()[0]
-
+        
         # Insert the draw numbers
         for number in draw["numbers"]:
             cursor.execute("""
                 INSERT INTO draw_numbers (draw_id, number)
                 VALUES (%s, %s)
             """, (draw_id, number))
+
+            # Insert the draw numbers
+        for prize_group in draw.get("prize_details_data", []):
+            for prize in prize_group:
+                cursor.execute("""
+                    INSERT INTO prize_details_data (draw_id, category, prize, winners)
+                    VALUES (%s, %s, %s, %s)
+                """, (
+                    draw_id,
+                    prize.get("category"),
+                    prize.get("prize"),
+                    prize.get("winners")
+                ))
 
         conn.commit()
 

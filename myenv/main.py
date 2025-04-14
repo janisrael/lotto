@@ -5,6 +5,7 @@ import requests
 import statistics
 import models
 import parser
+from datetime import datetime
 from draw_schedule import is_draw_day, is_draw_time
 from bs4 import BeautifulSoup
 
@@ -94,8 +95,22 @@ def parse_lottery_html(html_content):
         game_info['name'] = title.get_text(strip=True)
 
         date = tab.find(class_='winNumHomeDate') or tab.find(class_='drawDate')
-        game_info['date'] = date.get_text(strip=True) if date else 'Unknown'
+        date_2 = date.get_text(strip=True) if date else 'Unknown'
 
+        try:
+            # Try parsing as "Friday, April 11, 2025"
+            formatted_date = datetime.strptime(date_2, "%A, %B %d, %Y").date()
+        except ValueError:
+            try:
+                # Try parsing as "2025-04-11"
+                formatted_date = datetime.strptime(date_2, "%Y-%m-%d").date()
+            except ValueError:
+                raise ValueError(f"Unrecognized date format: {date_2}")
+        
+        # parsed_date = datetime.strptime(date_2, "%A, %B %d, %Y")
+        # formatted_date = parsed_date.strftime("%Y-%m-%d")
+
+        game_info['date'] = formatted_date
         main_numbers = tab.select('.winNumHomeNumber')
         game_info['numbers'] = [num.get_text(strip=True) for num in main_numbers]
 
@@ -139,7 +154,25 @@ def parse_lottery_html(html_content):
             game_info['jackpot_value'] = jackpot_value
             game_info['prize_details_data'].append(prize_data)
 
-        results.append(game_info)
+            
+# Convert to normalized parsed structure
+
+
+        parsed = {
+            "date": game_info.get("date") ,  # "YYYY-MM-DD"
+            "name": game_info.get("name"),
+            "bonus": game_info.get("bonus"),
+            "extra": game_info.get("extra"),
+            "jackpot_value": int(game_info.get("jackpot_value") or 0),
+            "numbers": game_info.get("numbers", []),
+            "past_winning_numbers": game_info.get("past_winning_numbers", ""),
+            "prize_details": game_info.get("prize_details", []),
+            "prize_details_data": game_info.get("prize_details_data", []),
+        }
+
+   
+
+        results.append(parsed)
 
     return results
 
@@ -175,11 +208,11 @@ def lottery_route():
         lotto_results = parse_lottery_html(page_contents)
       
 
-        parsed_frequencies = parser.parse_draw_result(lotto_results)
+        # parsed_frequencies = parser.parse_draw_result(lotto_results)
 
         parsed_frequencies2 = parse_lottery_html(page_contents)
 
-        for draw in parsed_frequencies:
+        for draw in parsed_frequencies2:
             models.save_draw_result(draw)
             
 
@@ -198,8 +231,6 @@ def lottery_route():
 
             lotto_results = parse_lottery_html(page_contents)
       
-   
-
 
 
             parsed_frequencies = parser.parse_draw_result(lotto_results)
