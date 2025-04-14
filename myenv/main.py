@@ -1,12 +1,38 @@
 from flask import Flask, jsonify
+from werkzeug.middleware.proxy_fix import ProxyFix
 import re
 import requests
 import statistics
+import models
+import parser
+from draw_schedule import is_draw_day, is_draw_time
 from bs4 import BeautifulSoup
 
+# --- Initialize Flask App ---
 app = Flask(__name__)
 
-# Function to fetch HTML page
+# --- Apply WSGI Middleware ---
+
+# Reverse proxy support (e.g. when behind nginx or a load balancer)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
+
+# Custom logger middleware (logs each request)
+class SimpleLoggerMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    def __call__(self, environ, start_response):
+        method = environ.get('REQUEST_METHOD')
+        path = environ.get('PATH_INFO')
+        print(f"[LOG] {method} {path}")
+        return self.app(environ, start_response)
+
+# Apply the logger middleware
+app.wsgi_app = SimpleLoggerMiddleware(app.wsgi_app)
+
+# --- Utilities ---
+
+# Fetch HTML page
 def get_page_contents(url):
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36'
@@ -16,12 +42,13 @@ def get_page_contents(url):
         return response.text
     return None
 
+# Extract prize breakdown table
 def extract_prize_table_data(soup):
     prize_tables = soup.select('table.prizeBreakdownTable')
     prize_data = []
 
     for table in prize_tables:
-        rows = table.find_all('tr')[1:]  # Skip header row
+        rows = table.find_all('tr')[1:]
         for row in rows:
             cols = row.find_all('td')
             if len(cols) == 3:
@@ -36,29 +63,24 @@ def extract_prize_table_data(soup):
 
     return prize_data
 
+# Extract prize + jackpot value from detail URL
 def get_prize_details_info(url):
     html = get_page_contents(url)
     if not html:
         return {'error': 'Failed to fetch prize details'}
     soup = BeautifulSoup(html, 'html.parser')
 
-    # Scrape prize breakdown data
     prize_data = extract_prize_table_data(soup)
-
-    # Scrape jackpot value from prize details page (inside .pastWinNumJackpot > h3)
     jackpot = soup.select_one('.pastWinNumJackpot h3')
     jackpot_value = jackpot.get_text(strip=True) if jackpot else None
 
-     # Clean the jackpot value to extract only the numeric part (e.g., "$32,000,000.00" -> "32000000")
     if jackpot_value:
-        # Use regex to remove non-numeric characters and commas, retaining only the numbers
-        jackpot_value_cleaned = re.sub(r'[^\d]', '', jackpot_value)  # Remove anything that is not a digit
-        jackpot_value = jackpot_value_cleaned  # Store the cleaned jackpot value
-
+        jackpot_value_cleaned = re.sub(r'[^\d]', '', jackpot_value)
+        jackpot_value = jackpot_value_cleaned
 
     return prize_data, jackpot_value
 
-# Function to parse lottery numbers
+# Parse main lottery result data from homepage
 def parse_lottery_html(html_content):
     soup = BeautifulSoup(html_content, 'html.parser')
     results = []
@@ -92,83 +114,140 @@ def parse_lottery_html(html_content):
         if extra:
             game_info['extra'] = extra.get_text(strip=True)
 
-        # Jackpot extraction (inside pastWinNumJackpot -> h3)
-        # jackpot = tab.select_one('.pastWinNumJackpot h3')
-        # if jackpot:
-        #     game_info['jackpot'] = jackpot.get_text(strip=True)
-        # else:
-        #     game_info['jackpot'] = None
-
-        # ✅ Get all <li class="homePrizeDetails"> and extract their rel values
         prize_details = tab.select('li.homePrizeDetails')
-        game_info['prize_details'] = []
-        for li in prize_details:
-            rel_value = li.get('rel', None)
-            if rel_value:
-                game_info['prize_details'].append('https://www.wclc.com' + rel_value)
+        game_info['prize_details'] = [
+            'https://www.wclc.com' + li.get('rel') for li in prize_details if li.get('rel')
+        ]
 
-        # Extract the onclick value from the second li with class 'winNumHomeDetail'
+        # Handle "past winning numbers" link
         past_winning_numbers = None
         win_num_home_details = tab.select('li.winNumHomeDetail')
         if len(win_num_home_details) >= 2:
-            # Extract the onclick value from the second <li> element
             onclick_value = win_num_home_details[1].get('onclick', None)
             if onclick_value:
-                # You can further process this onclick value if necessary, but for now, just store it
                 past_winning_numbers = onclick_value.split("'")[1] if onclick_value else None
 
-         # Correcting the past_winning_numbers to include the full URL
         if past_winning_numbers:
             game_info['past_winning_numbers'] = 'https://www.wclc.com' + past_winning_numbers
         else:
             game_info['past_winning_numbers'] = None
 
-        # Scrape prize details from prize_details URLs
+        # Scrape each prize detail page
         game_info['prize_details_data'] = []
         for prize_url in game_info['prize_details']:
             prize_data, jackpot_value = get_prize_details_info(prize_url)
-            game_info['prize_details_data'].append({
-                'prize_data': prize_data,
-                'jackpot_value': jackpot_value
-            })
+            game_info['jackpot_value'] = jackpot_value
+            game_info['prize_details_data'].append(prize_data)
 
         results.append(game_info)
 
     return results
 
+
+
+# --- Routes ---
+# @app.route('/lottery')
+# def lottery_route():
+#     x = 1
+#     #  if is_draw_day("lottoMax") and is_draw_time("lottoMax"):
+#     url = 'https://www.wclc.com/home.htm'
+#     page_contents = get_page_contents(url)
+
+#     if not page_contents:
+#         return '❌ Failed to retrieve lottery page.', 500
+
+#     lotto_results = parse_lottery_html(page_contents)
+#     return jsonify({'results': lotto_results})
+
 @app.route('/lottery')
 def lottery_route():
-    url = 'https://www.wclc.com/home.htm'  # You can change this to the actual lotto page
-    page_contents = get_page_contents(url)
+     # TODO: this function must be filter propertly, and include the save to database the prize_details_data
+     x = 1
+    #  if is_draw_day("lottoMax") and is_draw_time("lottoMax"):
+     if x == 1: 
+        url = 'https://www.wclc.com/home.htm'
+        page_contents = get_page_contents(url)
 
-    if not page_contents:
-        return '❌ Failed to retrieve lottery page.'
+        if not page_contents:
+            return '❌ Failed to retrieve Lotto Max statistics page.', 500
+        
+        models.create_draw_tables()
+        lotto_results = parse_lottery_html(page_contents)
+      
 
-    lotto_results = parse_lottery_html(page_contents)
+        parsed_frequencies = parser.parse_draw_result(lotto_results)
 
-    # Return as JSON
-    return jsonify({'results': lotto_results})
+        parsed_frequencies2 = parse_lottery_html(page_contents)
 
-# Original quote scraping route
-def get_quotes_and_authors(page_contents):
-    soup = BeautifulSoup(page_contents, 'html.parser')
-    quotes = soup.find_all('span', class_='text')
-    authors = soup.find_all('small', class_='author')
-    return quotes, authors
+        for draw in parsed_frequencies:
+            models.save_draw_result(draw)
+            
+
+        return jsonify({'data': parsed_frequencies2})
+
+     else:
+        models.create_draw_tables()
+        cached_data = models.get_latest_draw()
+
+        if not cached_data:
+            url = 'https://www.wclc.com/home.htm'
+            page_contents = get_page_contents(url)
+
+            if not page_contents:
+                return '❌ Failed to retrieve Lotto Max statistics page.', 500
+
+            lotto_results = parse_lottery_html(page_contents)
+      
+   
+
+
+
+            parsed_frequencies = parser.parse_draw_result(lotto_results)
+
+            for draw in parsed_frequencies:
+                models.save_draw_result(draw)
+        
+  
+
+        return jsonify({'data': cached_data})
+
+    # url = 'https://www.wclc.com/home.htm'
+    # page_contents = get_page_contents(url)
+
+    # if not page_contents:
+    #     return '❌ Failed to retrieve lottery page.', 500
+
+    # lotto_results = parse_lottery_html(page_contents)
+    # return jsonify({'results': lotto_results})
 
 @app.route('/statistics')
 def statistics_route():
-    url = 'https://www.lottomaxnumbers.com/statistics'
-    page_contents = get_page_contents(url)
+    if is_draw_day("lottoMax") and is_draw_time("lottoMax"):
+        url = 'https://www.lottomaxnumbers.com/statistics'
+        page_contents = get_page_contents(url)
 
-    if not page_contents:
-        return '❌ Failed to retrieve Lotto Max statistics page.'
+        if not page_contents:
+            return '❌ Failed to retrieve Lotto Max statistics page.', 500
 
-    lotto_frequencies = statistics.parse_lotto_max_frequencies(page_contents)
+        models.create_tables()
+        lotto_frequencies = statistics.parse_lotto_max_frequencies(page_contents)
+        parsed_frequencies = parser.parse_lotto_max_frequencies(lotto_frequencies)
+        models.save_frequencies(parsed_frequencies)
 
-    # Return as JSON
-    return jsonify({'frequencies': lotto_frequencies})
- 
+        return jsonify({'data': parsed_frequencies})
+
+    else:
+        models.create_tables()
+        cached_data = models.get_latest_frequencies()
+
+        if not cached_data:
+            return '⚠️ No cached data available yet. Please check back during draw time.', 404
+
+        return jsonify({'data': cached_data})
+
+
+
+# --- Run the App ---
 
 if __name__ == '__main__':
     app.run(host='127.0.0.1', port=5000, debug=True)
