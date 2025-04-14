@@ -1,6 +1,7 @@
 from flask import Flask, jsonify
 import re
 import requests
+import statistics
 from bs4 import BeautifulSoup
 
 app = Flask(__name__)
@@ -92,11 +93,11 @@ def parse_lottery_html(html_content):
             game_info['extra'] = extra.get_text(strip=True)
 
         # Jackpot extraction (inside pastWinNumJackpot -> h3)
-        jackpot = tab.select_one('.pastWinNumJackpot h3')
-        if jackpot:
-            game_info['jackpot'] = jackpot.get_text(strip=True)
-        else:
-            game_info['jackpot'] = None
+        # jackpot = tab.select_one('.pastWinNumJackpot h3')
+        # if jackpot:
+        #     game_info['jackpot'] = jackpot.get_text(strip=True)
+        # else:
+        #     game_info['jackpot'] = None
 
         # ✅ Get all <li class="homePrizeDetails"> and extract their rel values
         prize_details = tab.select('li.homePrizeDetails')
@@ -155,22 +156,19 @@ def get_quotes_and_authors(page_contents):
     authors = soup.find_all('small', class_='author')
     return quotes, authors
 
-@app.route('/test')
-def test_route():
-    url = 'https://www.wclc.com/home.htm'
+@app.route('/statistics')
+def statistics_route():
+    url = 'https://www.lottomaxnumbers.com/statistics'
     page_contents = get_page_contents(url)
 
-    if page_contents:
-        quotes, authors = get_quotes_and_authors(page_contents)
-        result = '<h1>Quotes:</h1><ul>'
-        for i in range(len(quotes)):
-            quote = quotes[i].text
-            author = authors[i].text
-            result += f'<li><strong>{quote}</strong> — {author}</li>'
-        result += '</ul>'
-        return result
-    else:
-        return '❌ Failed to retrieve quotes page.'
+    if not page_contents:
+        return '❌ Failed to retrieve Lotto Max statistics page.'
+
+    lotto_frequencies = statistics.parse_lotto_max_frequencies(page_contents)
+
+    # Return as JSON
+    return jsonify({'frequencies': lotto_frequencies})
+ 
 
 if __name__ == '__main__':
     app.run(host='127.0.0.1', port=5000, debug=True)
