@@ -128,7 +128,7 @@ def test_route():
         result += '</ul>'
         return result
     else:
-        return '❌ Failed to retrieve quotes page.'
+        return '❌ Failed to retrieve this quotes page.'
 
 if __name__ == '__main__':
     app.run(host='127.0.0.1', port=5000, debug=True)
