@@ -1,4 +1,5 @@
 from flask import Flask, jsonify
+import re
 import requests
 from bs4 import BeautifulSoup
 
@@ -39,7 +40,22 @@ def get_prize_details_info(url):
     if not html:
         return {'error': 'Failed to fetch prize details'}
     soup = BeautifulSoup(html, 'html.parser')
-    return extract_prize_table_data(soup)
+
+    # Scrape prize breakdown data
+    prize_data = extract_prize_table_data(soup)
+
+    # Scrape jackpot value from prize details page (inside .pastWinNumJackpot > h3)
+    jackpot = soup.select_one('.pastWinNumJackpot h3')
+    jackpot_value = jackpot.get_text(strip=True) if jackpot else None
+
+     # Clean the jackpot value to extract only the numeric part (e.g., "$32,000,000.00" -> "32000000")
+    if jackpot_value:
+        # Use regex to remove non-numeric characters and commas, retaining only the numbers
+        jackpot_value_cleaned = re.sub(r'[^\d]', '', jackpot_value)  # Remove anything that is not a digit
+        jackpot_value = jackpot_value_cleaned  # Store the cleaned jackpot value
+
+
+    return prize_data, jackpot_value
 
 # Function to parse lottery numbers
 def parse_lottery_html(html_content):
@@ -75,6 +91,13 @@ def parse_lottery_html(html_content):
         if extra:
             game_info['extra'] = extra.get_text(strip=True)
 
+        # Jackpot extraction (inside pastWinNumJackpot -> h3)
+        jackpot = tab.select_one('.pastWinNumJackpot h3')
+        if jackpot:
+            game_info['jackpot'] = jackpot.get_text(strip=True)
+        else:
+            game_info['jackpot'] = None
+
         # ✅ Get all <li class="homePrizeDetails"> and extract their rel values
         prize_details = tab.select('li.homePrizeDetails')
         game_info['prize_details'] = []
@@ -83,11 +106,30 @@ def parse_lottery_html(html_content):
             if rel_value:
                 game_info['prize_details'].append('https://www.wclc.com' + rel_value)
 
+        # Extract the onclick value from the second li with class 'winNumHomeDetail'
+        past_winning_numbers = None
+        win_num_home_details = tab.select('li.winNumHomeDetail')
+        if len(win_num_home_details) >= 2:
+            # Extract the onclick value from the second <li> element
+            onclick_value = win_num_home_details[1].get('onclick', None)
+            if onclick_value:
+                # You can further process this onclick value if necessary, but for now, just store it
+                past_winning_numbers = onclick_value.split("'")[1] if onclick_value else None
+
+         # Correcting the past_winning_numbers to include the full URL
+        if past_winning_numbers:
+            game_info['past_winning_numbers'] = 'https://www.wclc.com' + past_winning_numbers
+        else:
+            game_info['past_winning_numbers'] = None
+
         # Scrape prize details from prize_details URLs
         game_info['prize_details_data'] = []
         for prize_url in game_info['prize_details']:
-            prize_data = get_prize_details_info(prize_url)
-            game_info['prize_details_data'].append(prize_data)
+            prize_data, jackpot_value = get_prize_details_info(prize_url)
+            game_info['prize_details_data'].append({
+                'prize_data': prize_data,
+                'jackpot_value': jackpot_value
+            })
 
         results.append(game_info)
 
@@ -128,7 +170,7 @@ def test_route():
         result += '</ul>'
         return result
     else:
-        return '❌ Failed to retrieve this quotes page.'
+        return '❌ Failed to retrieve quotes page.'
 
 if __name__ == '__main__':
     app.run(host='127.0.0.1', port=5000, debug=True)
