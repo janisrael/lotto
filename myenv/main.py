@@ -35,7 +35,6 @@ class SimpleLoggerMiddleware:
 # Apply the logger middleware
 app.wsgi_app = SimpleLoggerMiddleware(app.wsgi_app)
 
-# --- Utilities ---
 
 # Fetch HTML page
 def get_page_contents(url):
