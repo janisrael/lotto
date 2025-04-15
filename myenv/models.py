@@ -288,3 +288,14 @@ def check_latest_draw(game_type):
         # draw["numbers"] = numbers
        
         return draw
+
+
+def get_user_by_email(email):
+    # Replace this with actual DB logic
+    # Example with SQLite or MySQL
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
+    result = cursor.fetchone()
+    if result:
+        return {'email': result[0], 'password': result[1]}  # Update fields based on schema
+    return None
