@@ -7,6 +7,7 @@ import requests
 import models
 from datetime import datetime
 from bs4 import BeautifulSoup
+from config import SOURCE_DATA
 # from main import get_page_contents, parse_lottery_html
 
 # Fetch HTML page
@@ -69,7 +70,7 @@ def parse_lottery_html(html_content):
 
         prize_details = tab.select('li.homePrizeDetails')
         game_info['prize_details'] = [
-            'https://www.wclc.com' + li.get('rel') for li in prize_details if li.get('rel')
+            SOURCE_DATA + li.get('rel') for li in prize_details if li.get('rel')
         ]
 
         # Handle "past winning numbers" link
@@ -81,7 +82,7 @@ def parse_lottery_html(html_content):
                 past_winning_numbers = onclick_value.split("'")[1] if onclick_value else None
 
         if past_winning_numbers:
-            game_info['past_winning_numbers'] = 'https://www.wclc.com' + past_winning_numbers
+            game_info['past_winning_numbers'] = SOURCE_DATA + past_winning_numbers
         else:
             game_info['past_winning_numbers'] = None
 
@@ -158,7 +159,7 @@ def run_lottery_job(draw_name):
     # print(draw_name)
     # if draw_name == 'lottoMax':
         # print('lottoMax')
-    url = 'https://www.wclc.com/home.htm'
+    url = SOURCE_DATA + '/home.htm'
     page_contents = get_page_contents(url)
 
     if not page_contents:

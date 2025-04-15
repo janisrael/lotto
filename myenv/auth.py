@@ -1,6 +1,9 @@
 from flask import Blueprint, request, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 from db import get_connection
+import jwt
+import os
+from config import SECRET_KEY
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -38,10 +41,23 @@ def login():
     cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
     user = cursor.fetchone()
-
     cursor.close()
     conn.close()
 
     if user and check_password_hash(user["password"], password):
-        return jsonify({"message": "Login successful"}), 200
+        token = jwt.encode(
+            {"sub": str(user["id"])},
+            SECRET_KEY,
+            algorithm="HS256"
+        )
+        # token = jwt.encode({
+        #     'sub': user['id'],
+        #     'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=1)  # Token expires in 1 hour
+        # }, SECRET_KEY, algorithm='HS256')
+        # Ensure token is string (PyJWT sometimes returns bytes)
+        if isinstance(token, bytes):
+            token = token.decode('utf-8')
+
+        return jsonify({"message": "Login successful", "token": token}), 200
+
     return jsonify({"error": "Invalid credentials"}), 401
