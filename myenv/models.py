@@ -185,15 +185,128 @@ def save_dra_lm_result(draw, game_type):
                 VALUES (%s, %s, %s, %s, %s)
             """, (
                 draw_id,
+                xprize.get("category"),
+                xprize.get("prize"),
+                xprize.get("winners"),
+                game_type['game_id']
+            ))
+
+        conn.commit()
+
+# --- DATA INSERTION --- 6-49 & 6-49 WESTER
+def save_dra_649_result(draw, game_type):
+    
+    if not isinstance(draw, dict):
+        raise ValueError("Expected a single draw dictionary")
+
+    with get_connection() as conn:
+        cursor = conn.cursor()
+
+        # Check if the draw date already exists
+        cursor.execute("""
+            SELECT COUNT(1) FROM draw_results
+            WHERE draw_date = %s AND name = %s
+        """, (draw["date"], draw["name"]))
+
+        if cursor.fetchone()[0] > 0:
+            print(f"Draw date {draw['date']} already exists. Skipping save.")
+            return  # Skip saving if the date already exists
+
+        # Insert the draw result
+        cursor.execute("""
+            INSERT INTO draw_results (
+                draw_date, name, bonus, extra, jackpot_value, game_id, draw_number
+            ) VALUES (%s, %s, %s, %s, %s, %s,%s)
+        """, (
+            draw["date"],
+            game_type['game_name'],
+            draw["bonus"],
+            draw["extra"],
+            int(draw["jackpot_value"]) if draw.get("jackpot_value") not in [None, ''] else None,
+            game_type['game_id'],
+            draw["draw_number"]
+
+        ))
+
+        conn.commit()
+
+        # Retrieve the inserted draw ID
+        draw_id = cursor.lastrowid
+        # draw_id = cursor.fetchone()[0]
+        
+        # Insert the draw numbers
+        for number in draw["numbers"]:
+            cursor.execute("""
+                INSERT INTO draw_numbers (draw_id, number)
+                VALUES (%s, %s)
+            """, (draw_id, number))
+
+        # Insert the Max Millions if exist
+        if draw['maxmillions']:
+            for mil in draw['maxmillions']:
+                mil_numbers = '-'.join(str(num) for num in mil)
+                cursor.execute("""
+                    INSERT INTO max_million_results (draw_id, numbers)
+                    VALUES (%s, %s)
+                """, (draw_id, mil_numbers))
+
+        # Insert the draw numbers
+        prize_details = draw.get("prize_details_data", {})
+        for prize in prize_details.get("prize_data", []):
+            cursor.execute("""
+                INSERT INTO prize_details_data (draw_id, category, prize, winners, game_id)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (
+                draw_id,
                 prize.get("category"),
                 prize.get("prize"),
                 prize.get("winners"),
                 game_type['game_id']
             ))
 
+        # Insert extra price breakdown, this is for millions not for main result
+        for xprize in prize_details.get("extra_price_breakdown", []):
+            cursor.execute("""
+                INSERT INTO extra_prize_details (draw_id, category, prize, winners, game_id)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (
+                draw_id,
+                xprize.get("category"),
+                xprize.get("prize"),
+                xprize.get("winners"),
+                game_type['game_id']
+            ))
+
+        # Insert supert draws
+        for sdraw in prize_details.get("super_draws", []):
+            cursor.execute("""
+                INSERT INTO super_draws (draw_id, numbers, prize, winners)
+                VALUES (%s, %s, %s, %s)
+            """, (
+                draw_id,
+                sdraw.get("winning_number"),
+                sdraw.get("prize"),
+                sdraw.get("winners")
+            ))
+
+        # Insert gold ball data
+        gold_ball_info = prize_details['gold_ball_drawn']
+        ball_color = gold_ball_info['ball']
+        winners = gold_ball_info['winners']
+
+        for entry in winners:
+            cursor.execute(
+                "INSERT INTO gold_ball_data (draw_id, winning_num, winners, prize, ball_drawn) VALUES (%s, %s, %s, %s, %s)",
+                (
+                    draw_id,
+                    entry['winning_number'],
+                    entry['winners'],
+                    entry['prize'],
+                    ball_color
+                )
+            )
+
         conn.commit()
-
-
 
 # --- DATA RETRIEVAL ---
 

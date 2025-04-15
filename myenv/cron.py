@@ -219,7 +219,7 @@ def run_lottery_job(draw_name):
             
             example.append(parsed_data)
             # # Save parsed data
-            # for draw in parsed_data:
-            #     models.save_dra_lm_result(draw, game)
+            for draw in parsed_data:
+                models.save_dra_649_result(draw, game)
 
     return example

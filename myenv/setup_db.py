@@ -78,7 +78,8 @@ def setup():
             draw_id INT,
             winning_num VARCHAR(50),
             prize VARCHAR(50),
-            ball_drawn VARCHAR(20)
+            ball_drawn VARCHAR(20),
+            winners VARCHAR(20)
         )
     """)
 
@@ -88,7 +89,8 @@ def setup():
             id INT AUTO_INCREMENT PRIMARY KEY,
             draw_id INT,
             numbers INT,
-            prize VARCHAR(50)
+            prize VARCHAR(50),
+            winners VARCHAR(50)
         )
     """)
 
