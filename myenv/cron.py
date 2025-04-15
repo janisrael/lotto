@@ -5,6 +5,7 @@ from flask import jsonify
 import re
 import requests
 import models
+from parser.lotto_result_parser import parse_lm_result,parse_649_result
 from datetime import datetime
 from bs4 import BeautifulSoup
 from config import SOURCE_DATA
@@ -153,28 +154,72 @@ def get_prize_details_info(url):
 
     return prize_data, jackpot_value
 
+
 def run_lottery_job(draw_name):
     # from main import get_page_contents, parse_lottery_html  # delayed import
 
-    # print(draw_name)
-    # if draw_name == 'lottoMax':
-        # print('lottoMax')
-    url = SOURCE_DATA + '/home.htm'
-    page_contents = get_page_contents(url)
+    # for game_id: LM /winning-numbers/lotto-max-extra.htm
+    print('running')
+    example = []
+    if draw_name.lower() == 'lottomax':
+        games = [
+            {
+                "game_id": "LM",
+                "url": SOURCE_DATA + '/winning-numbers/lotto-max-extra.htm',
+                "game_name": 'LOTTO MAX'
+            },
+            {
+                "game_id": "WM",
+                "url": SOURCE_DATA + '/winning-numbers/western-max-extra.htm',
+                "game_name": 'LOTTO MAX WESTERN'
+            }
+        ]
 
-    if not page_contents:
-        return '❌ Failed to retrieve Lotto Max statistics page.', 500
     
-    models.create_draw_tables()
-    # lotto_results = parse_lottery_html(page_contents)
+        for game in games:
+            page_contents = get_page_contents(game["url"])
+
+            if not page_contents:
+                return f'❌ Failed to retrieve data for {game["game_name"]}.', 500
+
+            models.create_draw_tables()
+
+            # Parse result (same parser for both)
+            parsed_data = parse_lm_result(page_contents, game)
+            example.append(parsed_data)
+            # # Save parsed data
+            for draw in parsed_data:
+                models.save_dra_lm_result(draw, game)
+
+    if draw_name.lower() == 'lotto649':
+        games = [
+            {
+                "game_id": "6-49",
+                "url": SOURCE_DATA + '/winning-numbers/lotto-649-extra.htm',
+                "game_name": 'LOTTO 6-49'
+            },
+            {
+                "game_id": "W6-49",
+                "url": SOURCE_DATA + '/winning-numbers/western-649-extra.htm',
+                "game_name": 'LOTTO 6-49 WESTERN'
+            }
+        ]
+
     
+        for game in games:
+            page_contents = get_page_contents(game["url"])
 
-    # parsed_frequencies = parser.parse_draw_result(page_contents)
+            if not page_contents:
+                return f'❌ Failed to retrieve data for {game["game_name"]}.', 500
 
-    parsed_frequencies2 = parse_lottery_html(page_contents)
+            models.create_draw_tables()
 
-    for draw in parsed_frequencies2:
-        models.save_draw_result(draw)
-        
+            # Parse result (same parser for both)
+            parsed_data = parse_649_result(page_contents, game)
+            
+            example.append(parsed_data)
+            # # Save parsed data
+            # for draw in parsed_data:
+            #     models.save_dra_lm_result(draw, game)
 
-    return 'true'
+    return example

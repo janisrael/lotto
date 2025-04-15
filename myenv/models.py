@@ -107,8 +107,9 @@ def create_draw_tables():
 
         conn.commit()
 
-# --- DATA INSERTION ---
-def save_draw_result(draw):
+# --- DATA INSERTION --- LOTTO MAX & WESTER LOTTO MAX
+def save_dra_lm_result(draw, game_type):
+    
     if not isinstance(draw, dict):
         raise ValueError("Expected a single draw dictionary")
 
@@ -120,6 +121,7 @@ def save_draw_result(draw):
             SELECT COUNT(1) FROM draw_results
             WHERE draw_date = %s AND name = %s
         """, (draw["date"], draw["name"]))
+
         if cursor.fetchone()[0] > 0:
             print(f"Draw date {draw['date']} already exists. Skipping save.")
             return  # Skip saving if the date already exists
@@ -127,17 +129,17 @@ def save_draw_result(draw):
         # Insert the draw result
         cursor.execute("""
             INSERT INTO draw_results (
-                draw_date, name, bonus, extra, jackpot_value,
-                past_winning_numbers, prize_details
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                draw_date, name, bonus, extra, jackpot_value, game_id, draw_number
+            ) VALUES (%s, %s, %s, %s, %s, %s,%s)
         """, (
             draw["date"],
-            draw["name"],
+            game_type['game_name'],
             draw["bonus"],
             draw["extra"],
-            int(draw.get("jackpot_value", 0)),
-            draw.get("past_winning_numbers", ""),
-            ",".join(draw.get("prize_details", []))
+            int(draw["jackpot_value"]) if draw.get("jackpot_value") not in [None, ''] else None,
+            game_type['game_id'],
+            draw["draw_number"]
+
         ))
 
         conn.commit()
@@ -153,18 +155,41 @@ def save_draw_result(draw):
                 VALUES (%s, %s)
             """, (draw_id, number))
 
-            # Insert the draw numbers
-        for prize_group in draw.get("prize_details_data", []):
-            for prize in prize_group:
+        # Insert the Max Millions if exist
+        if draw['maxmillions']:
+            for mil in draw['maxmillions']:
+                mil_numbers = '-'.join(str(num) for num in mil)
                 cursor.execute("""
-                    INSERT INTO prize_details_data (draw_id, category, prize, winners)
-                    VALUES (%s, %s, %s, %s)
-                """, (
-                    draw_id,
-                    prize.get("category"),
-                    prize.get("prize"),
-                    prize.get("winners")
-                ))
+                    INSERT INTO max_million_results (draw_id, numbers)
+                    VALUES (%s, %s)
+                """, (draw_id, mil_numbers))
+
+        # Insert the draw numbers
+        prize_details = draw.get("prize_details_data", {})
+        for prize in prize_details.get("prize_data", []):
+            cursor.execute("""
+                INSERT INTO prize_details_data (draw_id, category, prize, winners, game_id)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (
+                draw_id,
+                prize.get("category"),
+                prize.get("prize"),
+                prize.get("winners"),
+                game_type['game_id']
+            ))
+
+        # Insert extra price breakdown, this is for millions not for main result
+        for xprize in prize_details.get("extra_price_breakdown", []):
+            cursor.execute("""
+                INSERT INTO extra_prize_details (draw_id, category, prize, winners, game_id)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (
+                draw_id,
+                prize.get("category"),
+                prize.get("prize"),
+                prize.get("winners"),
+                game_type['game_id']
+            ))
 
         conn.commit()
 
@@ -175,6 +200,19 @@ def save_draw_result(draw):
 def get_latest_draw(game_type):
     with get_connection() as conn:
         cursor = conn.cursor(dictionary=True)
+
+        # ✅ Check if draw_results table exists
+        cursor.execute("""
+            SELECT COUNT(*) AS table_exists
+            FROM information_schema.tables 
+            WHERE table_schema = DATABASE() AND table_name = 'draw_results'
+        """)
+        result = cursor.fetchone()
+        
+        if not result or result["table_exists"] == 0:
+            # create_draw_tables()
+            return 'No Data'
+            # return None  # or raise an exception if you prefer
 
         if game_type == 'lottoMax':
             cursor.execute("""
