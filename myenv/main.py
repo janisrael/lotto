@@ -4,7 +4,7 @@ from auth import auth_bp
 from auth_middleware import token_required  # Import the token_required decorator
 import requests
 import models
-
+from cron import run_lottery_job
 import statistics
 import parser
 from datetime import datetime
@@ -49,9 +49,10 @@ def get_page_contents(url):
 
 
 @app.route('/lottery')
-@token_required  # Protect this route with token_required middleware
+# @token_required  # Protect this route with token_required middleware
 def lottery_route():
-    results = models.get_latest_draw('latest')
+    # results = models.get_latest_draw('latest')
+    results = run_lottery_job('lotto649')
     return jsonify({'results': results})
 
 
@@ -74,5 +75,5 @@ def statistics_route():
 
 # --- Run the App ---
 if __name__ == "__main__":
-    start_scheduler()  # Start scheduler in the background
-    app.run(host='127.0.0.1', port=5000, debug=True)
+    # start_scheduler()  # Start scheduler in the background
+    app.run(host='127.0.0.1', port=5001, debug=True)

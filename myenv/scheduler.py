@@ -11,9 +11,9 @@ test_time = (now + timedelta(minutes=1)).strftime("%H:%M")
 
 
 draw_schedules = {
-    "lottoMax": {"days": ["Tuesday", "Friday"], "time": "22:30"},
+    "lottoMax": {"days": ["Tuesday", "Friday"], "time": test_time},
     "lotto649": {"days": ["Wednesday", "Saturday"], "time": "22:30"},
-    "dailyGrand": {"days": ["Monday", "Thursday"], "time": test_time},
+    "dailyGrand": {"days": ["Monday", "Thursday"], "time": "22:30"},
 }
 
 def is_within_time_window(start_time_str, duration_minutes=120):
@@ -24,7 +24,7 @@ def is_within_time_window(start_time_str, duration_minutes=120):
     # print(start_time, end_time)
     return start_time <= now <= end_time
 # def should_run_now(start_time_str, interval_minutes=20):
-def should_run_now(start_time_str, interval_minutes=20):
+def should_run_now(start_time_str, interval_minutes=1):
     now = datetime.now()
     today_str = now.strftime("%Y-%m-%d")
     start_time = datetime.strptime(f"{today_str} {start_time_str}", "%Y-%m-%d %H:%M")
@@ -37,6 +37,7 @@ def should_run_now(start_time_str, interval_minutes=20):
 def run_scheduled_draws():
     now = datetime.now()
     current_day = now.strftime("%A")
+    
     
     for draw_name, schedule in draw_schedules.items():
 
