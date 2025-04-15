@@ -88,7 +88,7 @@ def setup():
         CREATE TABLE IF NOT EXISTS super_draws (
             id INT AUTO_INCREMENT PRIMARY KEY,
             draw_id INT,
-            numbers INT,
+            numbers VARCHAR(50),
             prize VARCHAR(50),
             winners VARCHAR(50)
         )
