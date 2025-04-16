@@ -131,16 +131,14 @@ def setup():
     #     )
     # ''')
 
-    # cursor.execute('''
-    #     CREATE TABLE IF NOT EXISTS prize_details_data (
-    #         id INT AUTO_INCREMENT PRIMARY KEY,
-    #         draw_id INT,
-    #         category VARCHAR(200),
-    #         prize VARCHAR(200),
-    #         winners VARCHAR(200),
-    #         FOREIGN KEY (draw_id) REFERENCES draw_results(id) ON DELETE CASCADE
-    #     )
-    # ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS jackpot_prize (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            game VARCHAR(100),
+            prize VARCHAR(200),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
 
     conn.commit()
     cursor.close()
