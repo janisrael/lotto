@@ -1,6 +1,6 @@
 # import mysql.connector
 from db import get_connection
-
+from datetime import date
 # DB_CONFIG = {
 #     "host": "localhost",
 #     "user": "root",
@@ -291,9 +291,9 @@ def save_dra_649_result(draw, game_type):
             ))
 
         # Insert gold ball data
-        gold_ball_info = prize_details['gold_ball_drawn']
-        ball_color = gold_ball_info['ball']
-        winners = gold_ball_info['winners']
+        gold_ball_info = prize_details.get('gold_ball_drawn', {})
+        ball_color = gold_ball_info.get('ball', 'N/A')
+        winners = gold_ball_info.get('winners') or []
 
         for entry in winners:
             cursor.execute(
@@ -309,93 +309,7 @@ def save_dra_649_result(draw, game_type):
 
         conn.commit()
 
-# --- DATA RETRIEVAL ---
 
-def get_latest_draw(game_type):
-    with get_connection() as conn:
-        cursor = conn.cursor(dictionary=True)
-
-        # ✅ Check if draw_results table exists
-        cursor.execute("""
-            SELECT COUNT(*) AS table_exists
-            FROM information_schema.tables 
-            WHERE table_schema = DATABASE() AND table_name = 'draw_results'
-        """)
-        result = cursor.fetchone()
-        
-        if not result or result["table_exists"] == 0:
-            # create_draw_tables()
-            return 'No Data'
-            # return None  # or raise an exception if you prefer
-
-        if game_type == 'lottoMax':
-            cursor.execute("""
-                SELECT * FROM draw_results
-                WHERE name = %s
-                ORDER BY draw_date DESC LIMIT 1
-            """, ("LOTTO MAX Winning Numbers",))
-
-
-        elif game_type == 'lotto649':
-            cursor.execute("""
-                SELECT * FROM draw_results
-                WHERE name = %s
-                ORDER BY draw_date DESC LIMIT 1
-            """, ("LOTTO 6/49 Winning Numbers",))
-
-        elif game_type == 'dailyGrand':
-            cursor.execute("""
-                SELECT * FROM draw_results
-                WHERE name = %s
-                ORDER BY draw_date DESC LIMIT 1
-            """, ("DAILY GRAND Winning Numbers",))
-        # Get latest result
-        elif game_type == 'latest':
-            cursor.execute("""
-                SELECT dr.*
-                FROM draw_results dr
-                JOIN (
-                    SELECT name, MAX(draw_date) AS latest_date
-                    FROM draw_results
-                    GROUP BY name
-                ) latest
-                ON dr.name = latest.name AND dr.draw_date = latest.latest_date
-                ORDER BY dr.draw_date DESC
-            """)
-
-        else:
-            cursor.execute("""
-                SELECT * FROM draw_results ORDER BY id ASC
-            """)
-        
-        draw = cursor.fetchall()
-
-        if not draw:
-            return None
-
-        # Get associated numbers
-        for pr in draw:
-            cursor.execute("SELECT * FROM prize_details_data WHERE draw_id = %s", (pr["id"],))
-            prizes = cursor.fetchall()
-            # dra['prize_details_data'] = prizes
-            if prizes:
-                pr["prize_details_data"] = prizes
-            else:
-                pr["prize_details_data"] = ''
-
-        for dr in draw:
-            cursor.execute("SELECT number FROM draw_numbers WHERE draw_id = %s", (dr["id"],))
-            numbers = [row["number"] for row in cursor.fetchall()]
-            if numbers:
-                dr["numbers"] = numbers
-            else:
-                dr["numbers"] = ''
-
-        # cursor.execute("SELECT number FROM draw_numbers WHERE draw_id = %s", (draw["id"],))
-        # numbers = [row["number"] for row in cursor.fetchall()]
-        # draw["numbers"] = numbers
-       
-        return draw
 
 
 def check_latest_draw(game_type):
@@ -451,3 +365,35 @@ def get_user_by_email(email):
     if result:
         return {'email': result[0], 'password': result[1]}  # Update fields based on schema
     return None
+
+def update_jackpot(jackpot_prize):
+    today = date.today()
+    
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Check if jackpot already exist
+            cursor.execute("""
+                SELECT COUNT(1) FROM jackpot_prize
+                WHERE DATE(created_at) = %s AND game = %s
+            """, (today, jackpot_prize["game_name"]))
+            if cursor.fetchone()[0] > 0:
+                print(f"Jackpot already exist on same date and same game")
+                return  # Skip saving if the date already exists
+
+            # Insert the jackpot prize
+            cursor.execute("""
+                INSERT INTO jackpot_prize (
+                    game, prize
+                ) VALUES (%s, %s)
+            """, (
+                jackpot_prize['game_name'],
+                jackpot_prize['prize']
+            ))
+
+            conn.commit()
+            print(f"Jackpot updated: {jackpot_prize['game_name']} - {jackpot_prize['prize']}")
+
+    except Exception as e:
+        print(f"Failed to update jackpot: {e}")

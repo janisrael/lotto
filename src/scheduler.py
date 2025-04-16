@@ -11,7 +11,7 @@ test_time = (now + timedelta(minutes=1)).strftime("%H:%M")
 
 
 draw_schedules = {
-    "lottoMax": {"days": ["Tuesday", "Friday"], "time": test_time},
+    "lottoMax": {"days": ["Tuesday", "Friday"], "time": "22:30"},
     "lotto649": {"days": ["Wednesday", "Saturday"], "time": "22:30"},
     "dailyGrand": {"days": ["Monday", "Thursday"], "time": "22:30"},
 }
@@ -45,6 +45,7 @@ def run_scheduled_draws():
           
             if is_within_time_window(schedule["time"], 120) and should_run_now(schedule["time"]):
                 run_lottery_job(draw_name)
+
             else:
                 print('false')
 

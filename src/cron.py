@@ -1,11 +1,10 @@
 
-import models
 from flask import jsonify
 # import parser
 import re
 import requests
-import models
-from parser.lotto_result_parser import parse_lm_result,parse_649_result,parse_daily_grand_result
+from models.save_data import *
+from parser.lotto_result_parser import parse_lm_result,parse_649_result,parse_daily_grand_result, parse_jackpots
 from datetime import datetime
 from bs4 import BeautifulSoup
 from config import SOURCE_DATA
@@ -182,14 +181,14 @@ def run_lottery_job(draw_name):
             if not page_contents:
                 return f'❌ Failed to retrieve data for {game["game_name"]}.', 500
 
-            models.create_draw_tables()
+            create_draw_tables()
 
             # Parse result (same parser for both)
             parsed_data = parse_lm_result(page_contents, game)
             example.append(parsed_data)
             # # Save parsed data
             for draw in parsed_data:
-                models.save_dra_lm_result(draw, game)
+                save_dra_lm_result(draw, game)
 
     if draw_name.lower() == 'lotto649':
         games = [
@@ -212,7 +211,7 @@ def run_lottery_job(draw_name):
             if not page_contents:
                 return f'❌ Failed to retrieve data for {game["game_name"]}.', 500
 
-            models.create_draw_tables()
+            create_draw_tables()
 
             # Parse result (same parser for both)
             parsed_data = parse_649_result(page_contents, game)
@@ -220,7 +219,7 @@ def run_lottery_job(draw_name):
             example.append(parsed_data)
             # # Save parsed data
             for draw in parsed_data:
-                models.save_dra_649_result(draw, game)
+                save_dra_649_result(draw, game)
 
     else:
         game = {
@@ -236,7 +235,7 @@ def run_lottery_job(draw_name):
         if not page_contents:
             return f'❌ Failed to retrieve data for {game["game_name"]}.', 500
 
-        models.create_draw_tables()
+        create_draw_tables()
 
         # Parse result (same parser for both)
         parsed_data = parse_daily_grand_result(page_contents, game)
@@ -244,6 +243,11 @@ def run_lottery_job(draw_name):
         # example.append(parsed_data)
         # # Save parsed data
         for draw in parsed_data:
-            models.save_dra_lm_result(draw, game)
+            save_dra_lm_result(draw, game)
 
-    return example
+    jackpot_data = parse_jackpots(page_contents)
+
+    for prize in jackpot_data:
+        update_jackpot(prize)
+
+    return parsed_data

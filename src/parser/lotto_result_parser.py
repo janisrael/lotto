@@ -1,14 +1,11 @@
-import models
 from flask import jsonify
 # import parser
 import re
 import requests
-import models
+from models.save_data import *
 from datetime import datetime
 from bs4 import BeautifulSoup
 from config import SOURCE_DATA
-
-from bs4 import BeautifulSoup
 
 
 # Fetch HTML page
@@ -390,19 +387,7 @@ def parse_649_result(html, game):
         # Prize details and jackpot
         prize_details_data, jackpot_value = get_prize_details_info_649(SOURCE_DATA + prize_break_down)
 
-        # if not jackpot_value:
-        #      # Find all elements with the class
-        #     jackpot_elements = soup.select('.nextJackpotPrizeAmount')
-
-        #     # Get inner HTML of each (if needed)
-        #     inner_html_list = [str(el.decode_contents()) for el in jackpot_elements]
-  
-        #     # Print results
-        #     for i, jackpot in enumerate(inner_html_list, start=1):
-        #         if i == 1:
-        #             jackpot_value = jackpot
-        
-
+    
         # Append all data
         draw_data.append({
             'date': formatted_date,
@@ -419,3 +404,39 @@ def parse_649_result(html, game):
         })
 
     return draw_data
+
+
+def parse_jackpots(html):
+    soup = BeautifulSoup(html, 'html.parser')
+
+    jackpot_data = [
+        {'game_name': 'LM', 'prize': 0},
+        {'game_name': 'WM', 'prize': 2000000},
+        {'game_name': '6-49', 'prize': 0},
+        {'game_name': 'W6-49', 'prize': 2000000},
+        {'game_name': 'DG', 'prize': 1000}
+    ]
+
+    # Get elements
+    jackpot_elements = soup.select('.nextJackpotPrizeAmount')
+    inner_html_list = [str(el.decode_contents()) for el in jackpot_elements]
+
+    # Print for debugging
+    print(inner_html_list)
+
+    # Helper function to update prize
+    def set_prize(data, game_name, prize_value):
+        for item in data:
+            if item['game_name'] == game_name:
+                item['prize'] = prize_value
+                break
+
+    # Update values (assuming order known)
+    if len(inner_html_list) > 0:
+        prize_value = int(inner_html_list[0]) * 1000000  # Convert to million
+        set_prize(jackpot_data, '6-49', prize_value)
+    if len(inner_html_list) > 1:
+        prize_value = int(inner_html_list[1]) * 1000000  # Convert to million
+        set_prize(jackpot_data, 'LM', prize_value)
+
+    return jackpot_data
