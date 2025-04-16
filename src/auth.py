@@ -1,11 +1,17 @@
 from flask import Blueprint, request, jsonify
-from werkzeug.security import generate_password_hash, check_password_hash
 from db import get_connection
 import jwt
 import os
+import bcrypt
 from config import SECRET_KEY
 
 auth_bp = Blueprint('auth', __name__)
+
+def generate_password_hash(password):
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+def check_password_hash(hashed_password, password):
+    return bcrypt.checkpw(password.encode('utf-8'), hashed_password.encode('utf-8'))
 
 @auth_bp.route('/register', methods=['POST'])
 def register():

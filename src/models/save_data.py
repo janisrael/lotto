@@ -1,0 +1,399 @@
+# import mysql.connector
+from db import get_connection
+from datetime import date
+# DB_CONFIG = {
+#     "host": "localhost",
+#     "user": "root",
+#     "password": "",
+#     "database": "lotterydb"
+# }
+
+# Context manager to handle connections
+# def get_connection():
+#     return mysql.connector.connect(**DB_CONFIG)
+conn = get_connection()
+
+def create_tables():
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS main_number_frequencies (
+                number VARCHAR(5) PRIMARY KEY,
+                frequency INT
+            )
+        ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS bonus_ball_frequencies (
+                number VARCHAR(5) PRIMARY KEY,
+                frequency INT
+            )
+        ''')
+        conn.commit()
+
+def save_frequencies(freq_data):
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        for item in freq_data['main_number_freq']:
+            cursor.execute('''
+                INSERT INTO main_number_frequencies (number, frequency)
+                VALUES (%s, %s)
+                ON DUPLICATE KEY UPDATE frequency = VALUES(frequency)
+            ''', (item['number'], int(item['frequency'])))
+
+        for item in freq_data['bonus_ball_freq']:
+            cursor.execute('''
+                INSERT INTO bonus_ball_frequencies (number, frequency)
+                VALUES (%s, %s)
+                ON DUPLICATE KEY UPDATE frequency = VALUES(frequency)
+            ''', (item['number'], int(item['frequency'])))
+        
+        conn.commit()
+
+def get_latest_frequencies():
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT number, frequency FROM main_number_frequencies")
+        main_data = [{"number": int(row[0]), "frequency": int(row[1])} for row in cursor.fetchall()]
+
+        cursor.execute("SELECT number, frequency FROM bonus_ball_frequencies")
+        bonus_data = [{"number": int(row[0]), "frequency": int(row[1])} for row in cursor.fetchall()]
+
+        if not main_data and not bonus_data:
+            return None
+
+        return {
+            "main_number_freq": main_data,
+            "bonus_ball_freq": bonus_data
+        }
+
+
+
+def create_draw_tables():
+     with get_connection() as conn:
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS draw_results (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                draw_date DATE,
+                name VARCHAR(255),
+                bonus VARCHAR(5),
+                extra VARCHAR(20),
+                jackpot_value BIGINT,
+                past_winning_numbers TEXT,
+                prize_details TEXT
+            )
+        ''')
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS draw_numbers (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                draw_id INT,
+                number VARCHAR(5),
+                FOREIGN KEY (draw_id) REFERENCES draw_results(id) ON DELETE CASCADE
+            )
+        ''')
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS prize_details_data (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                draw_id INT,
+                category VARCHAR(200),
+                prize VARCHAR(200),
+                winners VARCHAR(200),
+                FOREIGN KEY (draw_id) REFERENCES draw_results(id) ON DELETE CASCADE
+            )
+        ''')
+
+        conn.commit()
+
+# --- DATA INSERTION --- LOTTO MAX & WESTER LOTTO MAX
+def save_dra_lm_result(draw, game_type):
+    
+    if not isinstance(draw, dict):
+        raise ValueError("Expected a single draw dictionary")
+
+    with get_connection() as conn:
+        cursor = conn.cursor()
+
+        # Check if the draw date already exists
+        cursor.execute("""
+            SELECT COUNT(1) FROM draw_results
+            WHERE draw_date = %s AND name = %s
+        """, (draw["date"], draw["name"]))
+
+        if cursor.fetchone()[0] > 0:
+            print(f"Draw date {draw['date']} already exists. Skipping save.")
+            return  # Skip saving if the date already exists
+
+        # Insert the draw result
+        print(game_type)
+        cursor.execute("""
+            INSERT INTO draw_results (
+                draw_date, name, bonus, extra, jackpot_value, game_id, draw_number
+            ) VALUES (%s, %s, %s, %s, %s, %s,%s)
+        """, (
+            draw["date"],
+            game_type['game_name'],
+            draw["bonus"],
+            draw["extra"],
+            int(draw["jackpot_value"]) if draw.get("jackpot_value") not in [None, ''] else None,
+            game_type['game_id'],
+            draw["draw_number"]
+
+        ))
+
+        conn.commit()
+
+        # Retrieve the inserted draw ID
+        draw_id = cursor.lastrowid
+        # draw_id = cursor.fetchone()[0]
+        
+        # Insert the draw numbers
+        for number in draw["numbers"]:
+            cursor.execute("""
+                INSERT INTO draw_numbers (draw_id, number)
+                VALUES (%s, %s)
+            """, (draw_id, number))
+
+        # Insert the Max Millions if exist
+        if draw['maxmillions']:
+            for mil in draw['maxmillions']:
+                mil_numbers = '-'.join(str(num) for num in mil)
+                cursor.execute("""
+                    INSERT INTO max_million_results (draw_id, numbers)
+                    VALUES (%s, %s)
+                """, (draw_id, mil_numbers))
+
+        # Insert the draw numbers
+        prize_details = draw.get("prize_details_data", {})
+        for prize in prize_details.get("prize_data", []):
+            cursor.execute("""
+                INSERT INTO prize_details_data (draw_id, category, prize, winners, game_id)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (
+                draw_id,
+                prize.get("category"),
+                prize.get("prize"),
+                prize.get("winners"),
+                game_type['game_id']
+            ))
+
+        # Insert extra price breakdown, this is for millions not for main result
+        for xprize in prize_details.get("extra_price_breakdown", []):
+            cursor.execute("""
+                INSERT INTO extra_prize_details (draw_id, category, prize, winners, game_id)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (
+                draw_id,
+                xprize.get("category"),
+                xprize.get("prize"),
+                xprize.get("winners"),
+                game_type['game_id']
+            ))
+
+        conn.commit()
+
+# --- DATA INSERTION --- 6-49 & 6-49 WESTER
+def save_dra_649_result(draw, game_type):
+    
+    if not isinstance(draw, dict):
+        raise ValueError("Expected a single draw dictionary")
+
+    with get_connection() as conn:
+        cursor = conn.cursor()
+
+        # Check if the draw date already exists
+        cursor.execute("""
+            SELECT COUNT(1) FROM draw_results
+            WHERE draw_date = %s AND name = %s
+        """, (draw["date"], draw["name"]))
+
+        if cursor.fetchone()[0] > 0:
+            print(f"Draw date {draw['date']} already exists. Skipping save.")
+            return  # Skip saving if the date already exists
+
+        # Insert the draw result
+        cursor.execute("""
+            INSERT INTO draw_results (
+                draw_date, name, bonus, extra, jackpot_value, game_id, draw_number
+            ) VALUES (%s, %s, %s, %s, %s, %s,%s)
+        """, (
+            draw["date"],
+            game_type['game_name'],
+            draw["bonus"],
+            draw["extra"],
+            int(draw["jackpot_value"]) if draw.get("jackpot_value") not in [None, ''] else None,
+            game_type['game_id'],
+            draw["draw_number"]
+
+        ))
+
+        conn.commit()
+
+        # Retrieve the inserted draw ID
+        draw_id = cursor.lastrowid
+        # draw_id = cursor.fetchone()[0]
+        
+        # Insert the draw numbers
+        for number in draw["numbers"]:
+            cursor.execute("""
+                INSERT INTO draw_numbers (draw_id, number)
+                VALUES (%s, %s)
+            """, (draw_id, number))
+
+        # Insert the Max Millions if exist
+        if draw['maxmillions']:
+            for mil in draw['maxmillions']:
+                mil_numbers = '-'.join(str(num) for num in mil)
+                cursor.execute("""
+                    INSERT INTO max_million_results (draw_id, numbers)
+                    VALUES (%s, %s)
+                """, (draw_id, mil_numbers))
+
+        # Insert the draw numbers
+        prize_details = draw.get("prize_details_data", {})
+        for prize in prize_details.get("prize_data", []):
+            cursor.execute("""
+                INSERT INTO prize_details_data (draw_id, category, prize, winners, game_id)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (
+                draw_id,
+                prize.get("category"),
+                prize.get("prize"),
+                prize.get("winners"),
+                game_type['game_id']
+            ))
+
+        # Insert extra price breakdown, this is for millions not for main result
+        for xprize in prize_details.get("extra_price_breakdown", []):
+            cursor.execute("""
+                INSERT INTO extra_prize_details (draw_id, category, prize, winners, game_id)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (
+                draw_id,
+                xprize.get("category"),
+                xprize.get("prize"),
+                xprize.get("winners"),
+                game_type['game_id']
+            ))
+
+        # Insert supert draws
+        for sdraw in prize_details.get("super_draws", []):
+            cursor.execute("""
+                INSERT INTO super_draws (draw_id, numbers, prize, winners)
+                VALUES (%s, %s, %s, %s)
+            """, (
+                draw_id,
+                sdraw.get("winning_number"),
+                sdraw.get("prize"),
+                sdraw.get("winners")
+            ))
+
+        # Insert gold ball data
+        gold_ball_info = prize_details.get('gold_ball_drawn', {})
+        ball_color = gold_ball_info.get('ball', 'N/A')
+        winners = gold_ball_info.get('winners') or []
+
+        for entry in winners:
+            cursor.execute(
+                "INSERT INTO gold_ball_data (draw_id, winning_num, winners, prize, ball_drawn) VALUES (%s, %s, %s, %s, %s)",
+                (
+                    draw_id,
+                    entry['winning_number'],
+                    entry['winners'],
+                    entry['prize'],
+                    ball_color
+                )
+            )
+
+        conn.commit()
+
+
+
+
+def check_latest_draw(game_type):
+    with get_connection() as conn:
+        cursor = conn.cursor(dictionary=True)
+
+        if game_type == 'lottoMax':
+            cursor.execute("""
+                SELECT * FROM draw_results
+                WHERE name = %s
+                ORDER BY draw_date DESC LIMIT 1
+            """, ("LOTTO MAX Winning Numbers",))
+
+
+        elif game_type == 'lotto649':
+            cursor.execute("""
+                SELECT * FROM draw_results
+                WHERE name = %s
+                ORDER BY draw_date DESC LIMIT 1
+            """, ("LOTTO 6/49 Winning Numbers",))
+
+        elif game_type == 'dailyGrand':
+            cursor.execute("""
+                SELECT * FROM draw_results
+                WHERE name = %s
+                ORDER BY draw_date DESC LIMIT 1
+            """, ("DAILY GRAND Winning Numbers",))
+        # Get latest result
+        else:
+            cursor.execute("""
+                SELECT * FROM draw_results ORDER BY draw_date DESC LIMIT 1
+            """)
+        
+        draw = cursor.fetchone()
+
+        # if not draw:
+        #     return None
+
+        # # Get associated numbers
+        # cursor.execute("SELECT number FROM draw_numbers WHERE draw_id = %s", (draw["id"],))
+        # numbers = [row["number"] for row in cursor.fetchall()]
+        # draw["numbers"] = numbers
+       
+        return draw
+
+
+def get_user_by_email(email):
+    # Replace this with actual DB logic
+    # Example with SQLite or MySQL
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
+    result = cursor.fetchone()
+    if result:
+        return {'email': result[0], 'password': result[1]}  # Update fields based on schema
+    return None
+
+def update_jackpot(jackpot_prize):
+    today = date.today()
+    
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Check if jackpot already exist
+            cursor.execute("""
+                SELECT COUNT(1) FROM jackpot_prize
+                WHERE DATE(created_at) = %s AND game = %s
+            """, (today, jackpot_prize["game_name"]))
+            if cursor.fetchone()[0] > 0:
+                print(f"Jackpot already exist on same date and same game")
+                return  # Skip saving if the date already exists
+
+            # Insert the jackpot prize
+            cursor.execute("""
+                INSERT INTO jackpot_prize (
+                    game, prize
+                ) VALUES (%s, %s)
+            """, (
+                jackpot_prize['game_name'],
+                jackpot_prize['prize']
+            ))
+
+            conn.commit()
+            print(f"Jackpot updated: {jackpot_prize['game_name']} - {jackpot_prize['prize']}")
+
+    except Exception as e:
+        print(f"Failed to update jackpot: {e}")

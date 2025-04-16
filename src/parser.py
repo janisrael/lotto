@@ -1,4 +1,4 @@
-import models  # Ensure models.py is available and contains save_frequencies()
+from models.save_data import *
 from datetime import datetime
 
 def parse_lotto_max_frequencies(json_data):
@@ -23,7 +23,7 @@ def parse_lotto_max_frequencies(json_data):
     }
 
     # Save to DB via models
-    models.save_frequencies(result)
+    save_frequencies(result)
 
     return result
 
