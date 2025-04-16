@@ -127,6 +127,7 @@ def save_dra_lm_result(draw, game_type):
             return  # Skip saving if the date already exists
 
         # Insert the draw result
+        print(game_type)
         cursor.execute("""
             INSERT INTO draw_results (
                 draw_date, name, bonus, extra, jackpot_value, game_id, draw_number

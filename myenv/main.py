@@ -54,6 +54,14 @@ def lottery_route():
     results = run_lottery_job('lotto649')
     return jsonify({'results': results})
 
+# @app.route('/past-results')
+# # @token_required  # Protect this route with token_required middleware
+# def lottery_route():
+#     # results = models.get_latest_draw('latest')
+#     results = run_lottery_job('lotto649')
+#     return jsonify({'results': results})
+
+
 
 @app.route('/statistics')
 @token_required  # Protect this route with token_required middleware
