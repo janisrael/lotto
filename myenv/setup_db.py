@@ -76,10 +76,10 @@ def setup():
         CREATE TABLE IF NOT EXISTS gold_ball_data (
             id INT AUTO_INCREMENT PRIMARY KEY,
             draw_id INT,
-            winning_num VARCHAR(50),
-            prize VARCHAR(50),
+            winning_num VARCHAR(100),
+            prize VARCHAR(100),
             ball_drawn VARCHAR(20),
-            winners VARCHAR(20)
+            winners VARCHAR(100)
         )
     """)
 
@@ -89,8 +89,8 @@ def setup():
             id INT AUTO_INCREMENT PRIMARY KEY,
             draw_id INT,
             numbers VARCHAR(50),
-            prize VARCHAR(50),
-            winners VARCHAR(50)
+            prize VARCHAR(100),
+            winners VARCHAR(100)
         )
     """)
 

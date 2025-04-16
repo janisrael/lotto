@@ -22,6 +22,92 @@ def get_page_contents(url):
     return None
 
 
+def parse_daily_grand_result(html, game):
+    # Parse the HTML content with BeautifulSoup
+    soup = BeautifulSoup(html, 'html.parser')
+    
+    # Initialize an empty list to store the draw data
+    draw_data = []
+
+    # Game Type
+    game_type = game["game_name"]
+    # Loop through each draw
+    for draw in soup.select('div.pastWinNum'):
+        # Extract draw date
+        date_tag = draw.select_one('div.pastWinNumDate h4')
+        draw_date = date_tag.get_text(strip=True) if date_tag else None
+
+        try:
+            # Try parsing as "Friday, April 11, 2025"
+            formatted_date = datetime.strptime(draw_date, "%A, %B %d, %Y").date()
+        except ValueError:
+            try:
+                # Try parsing as "2025-04-11"
+                formatted_date = datetime.strptime(draw_date, "%Y-%m-%d").date()
+            except ValueError:
+                raise ValueError(f"Unrecognized date format: {draw_date}")
+            
+
+        # Extract winning numbers
+        numbers = [li.get_text(strip=True) for li in draw.select('li.pastWinNumber')]
+        
+        # for daily grand
+    
+        if game["game_id"] == 'DG':
+            bonus_tag = draw.select_one('li.winNumHomeNumberBonusDG')
+            if bonus_tag:
+                # Get the last child text (after <span>)
+                bonus_text = bonus_tag.find(text=True, recursive=False)
+                bonus = bonus_text.strip() if bonus_text else None
+            else:
+                bonus = None
+
+        else:
+            # Extract bonus number
+            bonus_tag = draw.select_one('li.pastWinNumberBonus')
+            bonus = bonus_tag.get_text(strip=True).replace("Bonus", "").strip() if bonus_tag else None
+
+        # Extract extra number
+        extra_tag = draw.select_one('div.pastWinNumExtra')
+        extra_number = extra_tag.get_text(strip=True) if extra_tag else None
+
+        # Extract draw number from the prize breakdown link
+        prize_breakdown = draw.select_one('div.pastWinNumPrizeBreakdown')
+        draw_number = None
+        prize_break_down = None  # Initialize the prize breakdown variable
+        if prize_breakdown and 'rel' in prize_breakdown.attrs:
+            rel = prize_breakdown['rel']
+            prize_break_down = rel  # Assign the rel value to the prize_break_down property
+            if "drawNumber=" in rel:
+                draw_number = rel.split('drawNumber=')[-1]
+
+        # Extract MAXMILLIONS numbers (if any)
+        maxmillions_draws = []
+        for ul in draw.select('div.pastWinNumMMGroup ul.pastWinNumbers'):
+            mm_numbers = [li.get_text(strip=True) for li in ul.select('li.pastWinNumMM')]
+            if mm_numbers:
+                maxmillions_draws.append(mm_numbers)
+
+        # Get prize breakdown
+        prize_breakdown_data, jackpot_value = get_prize_details_info(SOURCE_DATA + prize_break_down)
+
+        # Append the parsed data for each draw to the list
+        draw_data.append({
+            'date': formatted_date,
+            'draw_number': draw_number,
+            'name': game_type,
+            'numbers': numbers,
+            'jackpot_value': jackpot_value,
+            'bonus': bonus,
+            'extra': extra_number,
+            'maxmillions': maxmillions_draws,
+            'prize_break_down': prize_break_down,
+            'prize_details_data': prize_breakdown_data
+        })
+
+    return draw_data
+
+
 def parse_lm_result(html, game):
     # Parse the HTML content with BeautifulSoup
     soup = BeautifulSoup(html, 'html.parser')
@@ -47,7 +133,7 @@ def parse_lm_result(html, game):
                 formatted_date = datetime.strptime(draw_date, "%Y-%m-%d").date()
             except ValueError:
                 raise ValueError(f"Unrecognized date format: {draw_date}")
-            
+       
 
         # Extract winning numbers
         numbers = [li.get_text(strip=True) for li in draw.select('li.pastWinNumber')]
@@ -163,7 +249,7 @@ def extract_prize_table_649_data(soup):
     # Parsing Gold Ball Draw
     gold_ball = soup.select_one('div.pastWinNumLogoGPD')
     gold_ball_info = {
-        'ball': gold_ball.get_text(strip=True) if gold_ball else 'N/A',
+        'ball': gold_ball.get_text(strip=True) if gold_ball else None,
         'winners': []
     }
 
@@ -182,6 +268,10 @@ def extract_prize_table_649_data(soup):
                     'winners': winners,
                     'prize': prize
                 })
+
+    if not gold_ball_info['ball']:
+        gold_ball_info['winners'] = None
+        
     super_draws_header = soup.find('h3', string=lambda text: text and 'SUPER DRAWS' in text.upper())
     su_d = None
     super_draws = []
@@ -271,7 +361,7 @@ def parse_649_result(html, game):
 
         # Extract winning numbers
         numbers = [li.get_text(strip=True) for li in draw.select('li.pastWinNumber')]
-
+       
         # Extract bonus
         bonus_tag = draw.select_one('li.pastWinNumberBonus')
         bonus = bonus_tag.get_text(strip=True).replace("Bonus", "").strip() if bonus_tag else None
@@ -300,44 +390,18 @@ def parse_649_result(html, game):
         # Prize details and jackpot
         prize_details_data, jackpot_value = get_prize_details_info_649(SOURCE_DATA + prize_break_down)
 
-        # GOLD BALL info extraction
-        # gold_ball_info = {}
-        # ball_draw_tag = draw.select_one('div.pastWinNumLogoGPD')
-        # if ball_draw_tag:
-        #     before_strp = ball_draw_tag.get_text(strip=True).split(" ")[-1].lower()
-        #     gold_ball_info['ball_drawn'] = before_strp.split(":")[-1]
+        # if not jackpot_value:
+        #      # Find all elements with the class
+        #     jackpot_elements = soup.select('.nextJackpotPrizeAmount')
 
-        # gold_ball_table = draw.select('table.prizeBreakdownTable')
-        # winners_list = []
-
-        # if gold_ball_table:
-        #     last_table = gold_ball_table[-1]
-        #     rows = last_table.find_all('tr')[1:]
-        #     for row in rows:
-        #         cols = row.find_all('td')
-        #         if len(cols) == 3:
-        #             # Extract winning number and prize
-        #             winning_number = cols[0].get_text(strip=True)
-        #             prize = cols[2].get_text(strip=True).replace('$', '').replace(',', '')  # Clean up the prize format
-
-        #             winners_list.append({
-        #                 'winning_number': winning_number,
-        #                 'prize': prize
-        #             })
-
-        # if winners_list:
-        #     gold_ball_info['winners'] = winners_list
-
-        # Extract Super Draw info and move it inside the ball_drawn
-        # super_draw_info = []
-
-        # super_draw_tag = draw.select_one('div.pastWinNumSuperDraw')
-        # if super_draw_tag:
-        #     super_draw_data = super_draw_tag.get_text(strip=True)
-        #     super_draw_info.append(super_draw_data)
-
-        # if super_draw_info:
-        #     gold_ball_info['super_draws'] = super_draw_info
+        #     # Get inner HTML of each (if needed)
+        #     inner_html_list = [str(el.decode_contents()) for el in jackpot_elements]
+  
+        #     # Print results
+        #     for i, jackpot in enumerate(inner_html_list, start=1):
+        #         if i == 1:
+        #             jackpot_value = jackpot
+        
 
         # Append all data
         draw_data.append({
@@ -354,6 +418,4 @@ def parse_649_result(html, game):
 
         })
 
-    # Example of how the data might look in the end
-    # print(draw_data)
     return draw_data
