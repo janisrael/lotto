@@ -1,0 +1,26 @@
+# Python Bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual Environments
+venv/
+myvenv/
+.env/
+
+# Python distribution files
+*.egg
+*.egg-info/
+dist/
+build/
+
+# IDE settings (for example, for VS Code or PyCharm)
+.vscode/
+.idea/
+
+# MacOS specific files
+.DS_Store
+
+# Linux specific files
+*.swp
