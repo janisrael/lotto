@@ -1,22 +1,28 @@
 from flask import Flask, jsonify, request
 from werkzeug.middleware.proxy_fix import ProxyFix
-from auth import auth_bp
-from auth_middleware import token_required  # Import the token_required decorator
+from auth.auth import auth_bp
+from auth.auth_middleware import token_required  # Import the token_required decorator
 import requests
 from models.save_data import *
 from models.get_data import get_latest_draw,get_past_draw
-from cron import run_lottery_job
+# from cron import run_lottery_job
 import statistics
 import parser
-from datetime import datetime
+# from datetime import datetime
 # from draw_schedule import is_draw_day, is_draw_time, draw_schedules
-from bs4 import BeautifulSoup
+# from bs4 import BeautifulSoup
 from scheduler import start_scheduler
 from flask_cors import CORS
+from flasgger import Swagger
 
+from config import Config, mail
 
 # --- Initialize Flask App ---
 app = Flask(__name__)
+app.config.from_object(Config)
+
+mail.init_app(app)  # ✅ This will now work!
+swagger = Swagger(app)
 # For Development (Allow all origins)
 CORS(app, origins="*")
 
@@ -65,6 +71,16 @@ def latest_route():
 @app.route('/lottery')
 # @token_required  # Protect this route with token_required middleware
 def lottery_route():
+
+    """
+    Get the latest lottery result
+    ---
+    responses:
+      200:
+        description: Returns the latest lottery result
+        examples:
+          application/json: {"results": {"date": "2025-04-12", "numbers": [1,2,3,4,5,6,7]}}
+    """
     results = get_latest_draw('all')
     # results = run_lottery_job('dailygrand')
     return jsonify({'results': results})
@@ -72,6 +88,7 @@ def lottery_route():
 @app.route('/past-results', methods=['GET'])
 # @token_required
 def past_results_route():
+
     data = request.get_json()
 
     game_id = data.get('game_id')  # safely get game_id
