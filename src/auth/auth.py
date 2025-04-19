@@ -218,8 +218,14 @@ def login():
         # Ensure token is string (PyJWT sometimes returns bytes)
         if isinstance(token, bytes):
             token = token.decode('utf-8')
-
-        return jsonify({"message": "Login successful", "token": token ,"email": user['email'], "name": user['name']}), 200
+        login_data = {
+            "email": user['email'],
+            "name": user['name'],
+            "token": token,
+            "is_verified": user['is_verified'],
+            "message": "Login successful"
+        }
+        return jsonify(login_data), 200
 
     return jsonify({"error": "Invalid credentials"}), 401
 
