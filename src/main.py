@@ -69,7 +69,7 @@ def latest_route():
 
 
 @app.route('/lottery')
-# @token_required  # Protect this route with token_required middleware
+@token_required  # Protect this route with token_required middleware
 def lottery_route():
 
     """
